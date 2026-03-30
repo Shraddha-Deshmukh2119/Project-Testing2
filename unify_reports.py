@@ -3,60 +3,56 @@ import json
 import os
 
 def get_xml_raw(path):
-    if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
-    return "File Not Found"
+    return open(path, 'r', encoding='utf-8').read() if os.path.exists(path) else "Missing"
 
 def get_java_metrics(path):
-    if not os.path.exists(path): return {"error": "Missing Java XML"}
-    tree = ET.parse(path)
-    root = tree.getroot()
-    # Find the 'LINE' counter for the whole project
+    if not os.path.exists(path): return {"covered": 0, "total": 0, "pct": 0}
+    root = ET.parse(path).getroot()
     line_counter = root.find("./counter[@type='LINE']")
     if line_counter is not None:
-        missed = int(line_counter.get('missed'))
-        covered = int(line_counter.get('covered'))
-        percentage = (covered / (covered + missed)) * 100 if (covered + missed) > 0 else 0
-        return {"covered": covered, "missed": missed, "percentage": round(percentage, 2)}
-    return {"percentage": 0}
+        c, m = int(line_counter.get('covered')), int(line_counter.get('missed'))
+        return {"covered": c, "total": c + m, "pct": round((c/(c+m))*100, 2)}
+    return {"covered": 0, "total": 0, "pct": 0}
 
 def get_cpp_metrics(path):
-    if not os.path.exists(path): return {"error": "Missing C++ XML"}
-    tree = ET.parse(path)
-    root = tree.getroot()
-    # Gcovr/Cobertura format uses 'line-rate' attribute (0.0 to 1.0)
-    line_rate = float(root.get('line-rate', 0))
-    return {
-        "percentage": round(line_rate * 100, 2),
-        "lines_covered": root.get('lines-covered'),
-        "lines_valid": root.get('lines-valid')
-    }
+    if not os.path.exists(path): return {"covered": 0, "total": 0, "pct": 0}
+    root = ET.parse(path).getroot()
+    c, v = int(root.get('lines-covered', 0)), int(root.get('lines-valid', 0))
+    return {"covered": c, "total": v, "pct": round((c/v)*100, 2) if v > 0 else 0}
 
 def main():
-    java_xml_path = "java-project/target/site/jacoco/jacoco.xml"
-    cpp_xml_path = "cpp-project/sonar-cpp-coverage.xml"
+    j_path, c_path = "java-project/target/site/jacoco/jacoco.xml", "cpp-project/sonar-cpp-coverage.xml"
+    java, cpp = get_java_metrics(j_path), get_cpp_metrics(c_path)
+    
+    # Calculate the TRUE Weighted Average
+    total_cov = java['covered'] + cpp['covered']
+    total_lines = java['total'] + cpp['total']
+    project_avg = round((total_cov / total_lines) * 100, 2) if total_lines > 0 else 0
 
-    unified_report = {
-        "summary": {
-            "java_coverage": get_java_metrics(java_xml_path),
-            "cpp_coverage": get_cpp_metrics(cpp_xml_path)
+    report = {
+        "report_metadata": {
+            "project_name": "Unified Multi-Language System",
+            "status": "SUCCESS" if project_avg > 80 else "WARNING",
+            "final_weighted_coverage": f"{project_avg}%"
         },
-        "sonar_cloud_data": {},
-        "raw_xml_content": {
-            "java_jacoco": get_xml_raw(java_xml_path),
-            "cpp_gcovr": get_xml_raw(cpp_xml_path)
+        "language_breakdown": {
+            "java": java,
+            "cpp": cpp
+        },
+        "cloud_sync": {},
+        "raw_data_blobs": {
+            "jacoco_xml": get_xml_raw(j_path),
+            "gcovr_xml": get_xml_raw(c_path)
         }
     }
 
-    # Load the SonarCloud API JSONs if they exist
     if os.path.exists("sonar_metrics.json"):
         with open("sonar_metrics.json", "r") as f:
-            unified_report["sonar_cloud_data"] = json.load(f)
+            report["cloud_sync"] = json.load(f)
 
     with open("unified_master_report.json", "w") as f:
-        json.dump(unified_report, f, indent=4)
-    print("Success: unified_master_report.json generated.")
+        json.dump(report, f, indent=2)
+    print(f"Done! Final Weighted Coverage: {project_avg}%")
 
 if __name__ == "__main__":
     main()
