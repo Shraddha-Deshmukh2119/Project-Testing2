@@ -2,57 +2,59 @@ import xml.etree.ElementTree as ET
 import json
 import os
 
-def get_xml_raw(path):
-    return open(path, 'r', encoding='utf-8').read() if os.path.exists(path) else "Missing"
-
 def get_java_metrics(path):
     if not os.path.exists(path): return {"covered": 0, "total": 0, "pct": 0}
     root = ET.parse(path).getroot()
     line_counter = root.find("./counter[@type='LINE']")
     if line_counter is not None:
-        c, m = int(line_counter.get('covered')), int(line_counter.get('missed'))
+        c = int(line_counter.get('covered'))
+        m = int(line_counter.get('missed'))
         return {"covered": c, "total": c + m, "pct": round((c/(c+m))*100, 2)}
     return {"covered": 0, "total": 0, "pct": 0}
 
 def get_cpp_metrics(path):
     if not os.path.exists(path): return {"covered": 0, "total": 0, "pct": 0}
     root = ET.parse(path).getroot()
-    c, v = int(root.get('lines-covered', 0)), int(root.get('lines-valid', 0))
+    c = int(root.get('lines-covered', 0))
+    v = int(root.get('lines-valid', 0))
     return {"covered": c, "total": v, "pct": round((c/v)*100, 2) if v > 0 else 0}
 
 def main():
-    j_path, c_path = "java-project/target/site/jacoco/jacoco.xml", "cpp-project/sonar-cpp-coverage.xml"
-    java, cpp = get_java_metrics(j_path), get_cpp_metrics(c_path)
+    java_xml = "java-project/target/site/jacoco/jacoco.xml"
+    cpp_xml = "cpp-project/sonar-cpp-coverage.xml"
     
-    # Calculate the TRUE Weighted Average
+    java = get_java_metrics(java_xml)
+    cpp = get_cpp_metrics(cpp_xml)
+    
+    # Calculate TRUE Weighted Average
     total_cov = java['covered'] + cpp['covered']
     total_lines = java['total'] + cpp['total']
-    project_avg = round((total_cov / total_lines) * 100, 2) if total_lines > 0 else 0
+    weighted_avg = round((total_cov / total_lines) * 100, 2) if total_lines > 0 else 0
 
+    # Build the Neat JSON Structure
     report = {
         "report_metadata": {
             "project_name": "Unified Multi-Language System",
-            "status": "SUCCESS" if project_avg > 80 else "WARNING",
-            "final_weighted_coverage": f"{project_avg}%"
+            "final_weighted_coverage": f"{weighted_avg}%",
+            "status": "PASS" if weighted_avg > 80 else "FAIL"
         },
-        "language_breakdown": {
+        "language_stats": {
             "java": java,
             "cpp": cpp
         },
-        "cloud_sync": {},
-        "raw_data_blobs": {
-            "jacoco_xml": get_xml_raw(j_path),
-            "gcovr_xml": get_xml_raw(c_path)
-        }
+        "sonar_cloud_sync": {}
     }
 
+    # Load API data if available
     if os.path.exists("sonar_metrics.json"):
         with open("sonar_metrics.json", "r") as f:
-            report["cloud_sync"] = json.load(f)
+            report["sonar_cloud_sync"] = json.load(f)
 
+    # Save with 2-space indentation for neatness
     with open("unified_master_report.json", "w") as f:
         json.dump(report, f, indent=2)
-    print(f"Done! Final Weighted Coverage: {project_avg}%")
+    
+    print(f"Success! Final Weighted Average: {weighted_avg}%")
 
 if __name__ == "__main__":
     main()
