@@ -1,42 +1,82 @@
 #include <iostream>
 #include <cassert>
-#include "bank.h"
+
+// Include the implementation file directly (since no .h file)
+#include "bank.cpp"
+
 using namespace std;
 
+/* ------------------- Deposit Tests ------------------- */
 void testDeposit() {
-    BankAccount acc("Alice", 1000.0);
-    acc.deposit(500.0);
-    assert(acc.getBalance() == 1500.0);
-    cout << "testDeposit passed" << endl;
+    BankAccount acc("TestUser", "Savings", 5000);
+
+    assert(acc.deposit(2000) == true);
+    assert(acc.getBalance() == 7000);
+
+    assert(acc.deposit(-100) == false);
+    assert(acc.getBalance() == 7000);
 }
 
-void testWithdrawSuccess() {
-    BankAccount acc("Bob", 1000.0);
-    bool result = acc.withdraw(400.0);
-    assert(result == true);
-    assert(acc.getBalance() == 600.0);
-    cout << "testWithdrawSuccess passed" << endl;
+/* ------------------- Withdraw Tests ------------------- */
+void testWithdrawSavings() {
+    BankAccount acc("TestUser", "Savings", 5000);
+
+    // valid withdraw
+    assert(acc.withdraw(3000) == true);
+    assert(acc.getBalance() == 2000);
+
+    // minimum balance violation (should fail)
+    assert(acc.withdraw(1500) == false);
+    assert(acc.getBalance() == 2000);
+
+    // negative withdraw
+    assert(acc.withdraw(-100) == false);
 }
 
-void testWithdrawFailure() {
-    BankAccount acc("Charlie", 200.0);
-    bool result = acc.withdraw(500.0);
-    assert(result == false);
-    assert(acc.getBalance() == 200.0);
-    cout << "testWithdrawFailure passed" << endl;
+void testWithdrawCurrent() {
+    BankAccount acc("TestUser", "Current", 5000);
+
+    // valid withdraw (with transaction fee)
+    assert(acc.withdraw(1000) == true);
+    assert(acc.getBalance() == 3990); // 5000 - 1000 - 10 fee
 }
 
-void testInitialBalance() {
-    BankAccount acc("Dave", 750.0);
-    assert(acc.getBalance() == 750.0);
-    cout << "testInitialBalance passed" << endl;
+/* ------------------- Interest Tests ------------------- */
+void testInterest() {
+    BankAccount acc("TestUser", "Savings", 10000);
+
+    acc.applyInterest();
+    assert(acc.getBalance() == 10400); // 4% interest
+
+    BankAccount acc2("TestUser", "Current", 10000);
+    acc2.applyInterest();
+    assert(acc2.getBalance() == 10000); // no interest for current
 }
 
+/* ------------------- Loan Tests ------------------- */
+void testLoan() {
+    BankAccount acc("TestUser", "Savings", 5000);
+
+    // valid loan (limit = 2x balance = 10000)
+    assert(acc.takeLoan(8000) == true);
+    assert(acc.getLoanAmount() == 8000);
+    assert(acc.getBalance() == 13000);
+
+    // loan exceeding limit
+    assert(acc.takeLoan(30000) == false);
+
+    // negative loan
+    assert(acc.takeLoan(-100) == false);
+}
+
+/* ------------------- MAIN ------------------- */
 int main() {
     testDeposit();
-    testWithdrawSuccess();
-    testWithdrawFailure();
-    testInitialBalance();
-    cout << "All test cases passed successfully!" << endl;
+    testWithdrawSavings();
+    testWithdrawCurrent();
+    testInterest();
+    testLoan();
+
+    cout << "All test cases passed successfully!\n";
     return 0;
 }
