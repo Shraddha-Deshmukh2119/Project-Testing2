@@ -1,22 +1,5 @@
-// bank.cpp
-#include <iostream>
-#include <string>
-using namespace std;
+#include "bank.h"
 
-class BankAccount {
-private:
-    double balance;
-    string owner;
-
-public:
-    BankAccount(string owner, double initialBalance);
-    void deposit(double amount);
-    bool withdraw(double amount);
-    double getBalance() const;
-    string getOwner() const;
-};
-
-// ALL function BODIES must be here, OUTSIDE the class
 BankAccount::BankAccount(string owner, double initialBalance) {
     this->owner = owner;
     this->balance = initialBalance;
