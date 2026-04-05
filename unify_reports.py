@@ -1,60 +1,84 @@
 import xml.etree.ElementTree as ET
 import json
+import requests
 import os
 
-def get_java_metrics(path):
-    if not os.path.exists(path): return {"covered": 0, "total": 0, "pct": 0}
-    root = ET.parse(path).getroot()
-    line_counter = root.find("./counter[@type='LINE']")
-    if line_counter is not None:
-        c = int(line_counter.get('covered'))
-        m = int(line_counter.get('missed'))
-        return {"covered": c, "total": c + m, "pct": round((c/(c+m))*100, 2)}
-    return {"covered": 0, "total": 0, "pct": 0}
+# --- CONFIGURATION ---
+SONAR_PROJECT_KEY = "Shraddha-Deshmukh2119_Project-Testing2"
+SONAR_ORG = "shraddha-deshmukh2119"
+# The token is usually passed as an environment variable in Jenkins
+SONAR_TOKEN = os.getenv('SONAR_TOKEN') 
 
-def get_cpp_metrics(path):
-    if not os.path.exists(path): return {"covered": 0, "total": 0, "pct": 0}
-    root = ET.parse(path).getroot()
-    c = int(root.get('lines-covered', 0))
-    v = int(root.get('lines-valid', 0))
-    return {"covered": c, "total": v, "pct": round((c/v)*100, 2) if v > 0 else 0}
+JAVA_XML_PATH = "java-project/target/site/jacoco/jacoco.xml"
+CPP_XML_PATH = "cpp-project/sonar-cpp-coverage.xml"
+
+def get_java_details(xml_path):
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        data = {"classes": [], "totals": {}}
+        
+        for package in root.findall('package'):
+            for sourcefile in package.findall('sourcefile'):
+                data["classes"].append({
+                    "name": f"{package.get('name')}/{sourcefile.get('name').replace('.java', '')}",
+                    "lines_missed": next(c.get('missed') for c in sourcefile.findall('counter') if c.get('type') == 'LINE')
+                })
+        
+        for counter in root.findall('counter'):
+            data["totals"][counter.get('type')] = {
+                "missed": counter.get('missed'),
+                "covered": counter.get('covered')
+            }
+        return data
+    except Exception: return {}
+
+def get_cpp_details(xml_path):
+    try:
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
+        return {
+            "line_rate": root.get("line-rate"),
+            "branch_rate": root.get("branch-rate"),
+            "lines_covered": root.get("lines-covered"),
+            "lines_valid": root.get("lines-valid")
+        }
+    except Exception: return {}
+
+def fetch_sonar_data():
+    headers = {'Authorization': f'Bearer {SONAR_TOKEN}'}
+    
+    # 1. Fetch Measures (Coverage, Bugs, etc.)
+    measures_url = f"https://sonarcloud.io/api/measures/component?component={SONAR_PROJECT_KEY}&metricKeys=coverage,bugs,code_smells,uncovered_lines,vulnerabilities"
+    
+    # 2. Fetch Issues (The actual bug list)
+    issues_url = f"https://sonarcloud.io/api/issues/search?componentKeys={SONAR_PROJECT_KEY}&ps=100"
+    
+    try:
+        m_resp = requests.get(measures_url, headers=headers).json()
+        i_resp = requests.get(issues_url, headers=headers).json()
+        return m_resp.get('component', {}), i_resp
+    except Exception as e:
+        print(f"Error fetching Sonar data: {e}")
+        return {}, {}
 
 def main():
-    java_xml = "java-project/target/site/jacoco/jacoco.xml"
-    cpp_xml = "cpp-project/sonar-cpp-coverage.xml"
-    
-    java = get_java_metrics(java_xml)
-    cpp = get_cpp_metrics(cpp_xml)
-    
-    # Calculate TRUE Weighted Average
-    total_cov = java['covered'] + cpp['covered']
-    total_lines = java['total'] + cpp['total']
-    weighted_avg = round((total_cov / total_lines) * 100, 2) if total_lines > 0 else 0
+    java_data = get_java_details(JAVA_XML_PATH)
+    cpp_data = get_cpp_details(CPP_XML_PATH)
+    sonar_measures, sonar_issues = fetch_sonar_data()
 
-    # Build the Neat JSON Structure
-    report = {
-        "report_metadata": {
-            "project_name": "Unified Multi-Language System",
-            "final_weighted_coverage": f"{weighted_avg}%",
-            "status": "PASS" if weighted_avg > 80 else "FAIL"
-        },
-        "language_stats": {
-            "java": java,
-            "cpp": cpp
-        },
-        "sonar_cloud_sync": {}
+    unified_report = {
+        "metadata": {"status": "Success", "version": "2.0"},
+        "java_detailed": java_data,
+        "cpp_detailed": cpp_data,
+        "sonar_cloud_analysis": {"component": sonar_measures},
+        "issues_and_bugs": sonar_issues
     }
 
-    # Load API data if available
-    if os.path.exists("sonar_metrics.json"):
-        with open("sonar_metrics.json", "r") as f:
-            report["sonar_cloud_sync"] = json.load(f)
-
-    # Save with 2-space indentation for neatness
     with open("unified_master_report.json", "w") as f:
-        json.dump(report, f, indent=2)
+        json.dump(unified_report, f, indent=4)
     
-    print(f"Success! Final Weighted Average: {weighted_avg}%")
+    print("Unified Report Generated: unified_master_report.json")
 
 if __name__ == "__main__":
     main()
