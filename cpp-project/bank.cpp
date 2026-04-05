@@ -1,28 +1,86 @@
-#include "bank.h"
+#include <iostream>
+#include <string>
+using namespace std;
 
-BankAccount::BankAccount(string owner, double initialBalance) {
-    this->owner = owner;
-    this->balance = initialBalance;
-}
+class BankAccount {
+private:
+    string accountHolder;
+    string accountType;   // "Savings" or "Current"
+    double balance;
+    double loanAmount;
 
-void BankAccount::deposit(double amount) {
-    if (amount > 0) {
-        balance += amount;
+public:
+    BankAccount(string name, string type, double initialBalance) {
+        accountHolder = name;
+        accountType = type;
+        balance = initialBalance;
+        loanAmount = 0;
     }
-}
 
-bool BankAccount::withdraw(double amount) {
-    if (amount > 0 && amount <= balance) {
-        balance -= amount;
+    bool deposit(double amount) {
+        if (amount <= 0) {
+            return false;
+        }
+        balance += amount;
         return true;
     }
-    return false;
-}
 
-double BankAccount::getBalance() const {
-    return balance;
-}
+    bool withdraw(double amount) {
+        if (amount <= 0) {
+            return false;
+        }
 
-string BankAccount::getOwner() const {
-    return owner;
-}
+        // Savings account must maintain minimum balance of 1000
+        if (accountType == "Savings") {
+            if (balance - amount < 1000) {
+                return false;
+            }
+        }
+
+        if (amount > balance) {
+            return false;
+        }
+
+        balance -= amount;
+
+        // Current account has transaction fee of 10
+        if (accountType == "Current") {
+            balance -= 10;
+        }
+
+        return true;
+    }
+
+    void applyInterest() {
+        if (accountType == "Savings") {
+            balance += balance * 0.04;  // 4% interest
+        }
+    }
+
+    bool takeLoan(double amount) {
+        if (amount <= 0) {
+            return false;
+        }
+
+        // Loan limit = 2x current balance
+        if (amount > balance * 2) {
+            return false;
+        }
+
+        loanAmount += amount;
+        balance += amount;
+        return true;
+    }
+
+    double getBalance() const {
+        return balance;
+    }
+
+    double getLoanAmount() const {
+        return loanAmount;
+    }
+
+    string getAccountType() const {
+        return accountType;
+    }
+};
