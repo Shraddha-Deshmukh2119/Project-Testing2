@@ -1,7 +1,6 @@
-// test_bank.cpp
 #include <iostream>
 #include <cassert>
-#include "bank.cpp"   // or separate header — see note below
+#include "bank.h"
 using namespace std;
 
 void testDeposit() {
